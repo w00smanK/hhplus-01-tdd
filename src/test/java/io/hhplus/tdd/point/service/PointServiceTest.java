@@ -2,6 +2,9 @@ package io.hhplus.tdd.point.service;
 
 import io.hhplus.tdd.database.PointHistoryTable;
 import io.hhplus.tdd.database.UserPointTable;
+import io.hhplus.tdd.exceptions.PointMaxException;
+import io.hhplus.tdd.exceptions.PointNotException;
+import io.hhplus.tdd.exceptions.PointOverException;
 import io.hhplus.tdd.point.PointHistory;
 import io.hhplus.tdd.point.TransactionType;
 import io.hhplus.tdd.point.UserPoint;
@@ -10,6 +13,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -18,13 +24,13 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.BDDMockito.given;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class PointServiceTest {
 
     private UserPoint userPoint;
-
     @Mock
     private UserPointTable userPointTable;
     @Mock
@@ -135,34 +141,69 @@ class PointServiceTest {
             assertThat(result.id()).isEqualTo(1L);
             assertThat(result.point()).isEqualTo(8000L);
         }
+
+        @ParameterizedTest
+        @DisplayName("포인트 저장 실패 테스트 - 포인트 충전 시 0보다 작은 수 충전 했을 때 예외 발생 테스트")
+        @ValueSource(longs = {-2000L}) // given
+        void chargePointExceptionTest(long point) {
+            // when & then
+            assertThatThrownBy(() -> pointService.charge(2L, point))
+                    .isInstanceOf(PointOverException.class)
+                    .hasMessage("잘못된 충전 요청: 충전 금액은 0 이상이어야 합니다. 요청한 금액: " + point);
+        }
+        @Test
+        @DisplayName("포인트 저장 실패 테스트 - 백만원 보다 넘게 가지면 안되는 포인트 정책 위반 하는 경우")
+        void maxPointExceptionTest() {
+
+            // given
+            given(userPointTable.selectById(2L))
+                    .willReturn(new UserPoint(2L, 500000L, System.currentTimeMillis()));
+            // when & then
+            assertThatThrownBy(() -> pointService.charge(2L, 600000L))
+                    .isInstanceOf(PointMaxException.class)
+                    .hasMessageContaining("잘못된 충전 요청: 충전 금액은 1000000넘을 수 없습니다. 충전 금액: " +1100000L);
+        }
     }
 
     @Nested
     @DisplayName("특정 유저의 포인트를 사용하는 기능")
-     class use {
-            @Test
-            @DisplayName("정상적인 포인트 사용")
-            void use() {
+    class use {
+        @Test
+        @DisplayName("정상적인 포인트 사용")
+        void use() {
 
-                //given
-                given(userPointTable.selectById(1L))
-                        .willReturn(userPoint);
+            //given
+            given(userPointTable.selectById(1L))
+                    .willReturn(userPoint);
 
-                long usingPoint = 2000L;
-                long newPoint = userPoint.point() - usingPoint;
+            long usingPoint = 2000L;
+            long newPoint = userPoint.point() - usingPoint;
 
-                given(userPointTable.insertOrUpdate(1L, newPoint))
-                        .willReturn(new UserPoint(1L, 1000L, System.currentTimeMillis()));
+            given(userPointTable.insertOrUpdate(1L, newPoint))
+                    .willReturn(new UserPoint(1L, 1000L, System.currentTimeMillis()));
 
-                //when
-                UserPoint result = pointService.use(1L, 2000L);
+            //when
+            UserPoint result = pointService.use(1L, 2000L);
 
-                //then
-                assertThat(result.id()).isEqualTo(1L);
-                assertThat(result.point()).isEqualTo(1000L);
-            }
-
+            //then
+            assertThat(result.id()).isEqualTo(1L);
+            assertThat(result.point()).isEqualTo(1000L);
         }
+
+        @Test
+        @DisplayName("포인트 사용 실패 테스트 - 기존 3000포인트만 있는데 5000 포인트 사용하려고 하면 예외 발생 테스트 ")
+        void usePointExceptionTest() {
+
+            // given
+            given(userPointTable.selectById(1L))
+                    .willReturn(userPoint);
+
+            // when & then
+            assertThatThrownBy(() -> pointService.use(1L, 5000L))
+                    .isInstanceOf(PointNotException.class)
+                    .hasMessageContaining("잘못된 사용 요청: 금액이 부족합니다 요청한 금액: "+5000L);
+        }
+    }
 
     // insertHistory 메서드는 테스트 코드에서만 사용되는 메서드
     private void insertHistory(long userId, long amount, TransactionType transactionType) {
