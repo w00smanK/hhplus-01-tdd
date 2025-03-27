@@ -2,6 +2,9 @@ package io.hhplus.tdd.point.service;
 
 import io.hhplus.tdd.database.PointHistoryTable;
 import io.hhplus.tdd.database.UserPointTable;
+import io.hhplus.tdd.exceptions.PointMaxException;
+import io.hhplus.tdd.exceptions.PointNotException;
+import io.hhplus.tdd.exceptions.PointOverException;
 import io.hhplus.tdd.point.PointHistory;
 import io.hhplus.tdd.point.TransactionType;
 import io.hhplus.tdd.point.UserPoint;
@@ -41,10 +44,14 @@ public class PointService implements IPointService {
      */
     @Override
     public UserPoint charge(Long id, Long  amount) {
+        if (amount < 0) {
+            throw new PointOverException(amount);
+        }
         UserPoint currentPoint = userPointTable.selectById(id);
-
         long newAmount = currentPoint.point() + amount;
-
+        if (newAmount > 1000000L) {
+            throw new PointMaxException(newAmount);
+        }
         UserPoint updatedPoint = userPointTable.insertOrUpdate(id, newAmount);
         pointHistoryTable.insert(id, amount, TransactionType.CHARGE, System.currentTimeMillis());
         return updatedPoint;
@@ -57,7 +64,9 @@ public class PointService implements IPointService {
     public UserPoint use(Long id, Long amount) {
 
         UserPoint currentPoint = userPointTable.selectById(id);
-
+        if (currentPoint.point() < amount) {
+            throw new PointNotException(amount);
+        }
         long newAmount = currentPoint.point() - amount;
         UserPoint updatedPoint = userPointTable.insertOrUpdate(id, newAmount);
         pointHistoryTable.insert(id, amount, TransactionType.USE, System.currentTimeMillis());
