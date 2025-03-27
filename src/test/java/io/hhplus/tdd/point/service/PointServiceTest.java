@@ -8,6 +8,8 @@ import io.hhplus.tdd.exceptions.PointOverException;
 import io.hhplus.tdd.point.PointHistory;
 import io.hhplus.tdd.point.TransactionType;
 import io.hhplus.tdd.point.UserPoint;
+
+import io.hhplus.tdd.point.handler.LockManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -22,19 +24,24 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.BDDMockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class PointServiceTest {
 
     private UserPoint userPoint;
+    private final ReentrantLock lock = new ReentrantLock();
     @Mock
     private UserPointTable userPointTable;
     @Mock
     private PointHistoryTable pointHistoryTable;
+    @Mock
+    LockManager lockManager;
     @InjectMocks
     private PointService pointService;
     @BeforeEach
@@ -123,7 +130,9 @@ class PointServiceTest {
         @Test
         @DisplayName("정상적인 포인트 충전")
         void charge() {
-
+            // given
+            given(lockManager.getLock(1L))
+                    .willReturn(lock);
             //given
             given(userPointTable.selectById(1L))
                     .willReturn(userPoint);
@@ -154,6 +163,9 @@ class PointServiceTest {
         @Test
         @DisplayName("포인트 저장 실패 테스트 - 백만원 보다 넘게 가지면 안되는 포인트 정책 위반 하는 경우")
         void maxPointExceptionTest() {
+            // given
+            given(lockManager.getLock(2L))
+                    .willReturn(lock);
 
             // given
             given(userPointTable.selectById(2L))
@@ -172,6 +184,9 @@ class PointServiceTest {
         @DisplayName("정상적인 포인트 사용")
         void use() {
 
+            // given
+            given(lockManager.getLock(1L))
+                    .willReturn(lock);
             //given
             given(userPointTable.selectById(1L))
                     .willReturn(userPoint);
@@ -193,7 +208,9 @@ class PointServiceTest {
         @Test
         @DisplayName("포인트 사용 실패 테스트 - 기존 3000포인트만 있는데 5000 포인트 사용하려고 하면 예외 발생 테스트 ")
         void usePointExceptionTest() {
-
+            // given
+            given(lockManager.getLock(1L))
+                    .willReturn(lock);
             // given
             given(userPointTable.selectById(1L))
                     .willReturn(userPoint);
